@@ -7,6 +7,6 @@ scienceplots~=2.1.1
 scipy~=1.7.1
 seaborn~=0.12.1
 torch~=1.8.0
-torchcde~=0.2.0
+torchcde~=0.2.1
 tqdm~=4.51.0
 wandb~=0.10.30

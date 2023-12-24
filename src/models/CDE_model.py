@@ -143,8 +143,8 @@ class NeuralCDE(torch.nn.Module):
     def forward(self, x, treat, device):
         # Interpolation:
         if self.interpolation == "cubic":
-            x = torchcde.NaturalCubicSpline(x)
-            treat = torchcde.NaturalCubicSpline(treat)
+            x = torchcde.interpolation_cubic.NaturalCubicSpline(x)
+            treat = torchcde.interpolation_cubic.NaturalCubicSpline(treat)
         elif self.interpolation == "linear":
             # print('Adjust in prepare_dataloader! Cubic used now')
             x = torchcde.LinearInterpolation(x)
