@@ -1,8 +1,9 @@
 # Adapted from: https://github.com/seedatnabeel/TE-CDE/blob/main/src/utils/losses.py
 
+import math
+
 import torch
 from torch.nn import functional as F
-import math
 
 
 def mse(ground_truth_outputs, predictions, active_entries, obs_prob=None, norm=1150):
@@ -22,12 +23,18 @@ def mse(ground_truth_outputs, predictions, active_entries, obs_prob=None, norm=1
     assert predictions.shape == active_entries.shape
     if obs_prob is None:
         loss = torch.mean(
-            (ground_truth_outputs[active_entries == 1.] - predictions[active_entries == 1.]).pow(2)
+            (
+                ground_truth_outputs[active_entries == 1.0]
+                - predictions[active_entries == 1.0]
+            ).pow(2)
         )
     else:
         loss = torch.mean(
-            (ground_truth_outputs[active_entries == 1.] - predictions[active_entries == 1.]).pow(2)
-            / obs_prob[active_entries == 1.]
+            (
+                ground_truth_outputs[active_entries == 1.0]
+                - predictions[active_entries == 1.0]
+            ).pow(2)
+            / obs_prob[active_entries == 1.0]
         )
 
     return loss

@@ -17,7 +17,9 @@ import torchcde
 # That's what this CDEFunc class does.
 ######################
 class CDEFunc(torch.nn.Module):
-    def __init__(self, input_channels, hidden_channels, hidden_channels_func, hidden_layers_func):
+    def __init__(
+        self, input_channels, hidden_channels, hidden_channels_func, hidden_layers_func
+    ):
         ######################
         # input_channels is the number of input channels in the data X. (Determined by the data.)
         # hidden_channels is the number of channels for z_t. (Determined by you!)
@@ -31,7 +33,9 @@ class CDEFunc(torch.nn.Module):
         for i in range(hidden_layers_func):
             layers.append(torch.nn.Linear(hidden_channels_func, hidden_channels_func))
             layers.append(torch.nn.ReLU())
-        layers.append(torch.nn.Linear(hidden_channels_func, input_channels * hidden_channels))
+        layers.append(
+            torch.nn.Linear(hidden_channels_func, input_channels * hidden_channels)
+        )
         self.func = nn.Sequential(*layers)
 
     def forward(self, t, z):
@@ -59,22 +63,22 @@ class CDEFunc(torch.nn.Module):
 ######################
 class NeuralCDE(torch.nn.Module):
     def __init__(
-            self,
-            input_channels_x,
-            hidden_channels_x,
-            hidden_channels_enc,
-            hidden_layers_enc,
-            hidden_channels_dec,
-            hidden_layers_dec,
-            hidden_channels_map,
-            hidden_layers_map,
-            output_channels,    # Per timestep
-            multitask,
-            window=7,
-            interpolation="cubic",
-            # interpolation="linear",
-            prediction="regression",
-            invariance=True
+        self,
+        input_channels_x,
+        hidden_channels_x,
+        hidden_channels_enc,
+        hidden_layers_enc,
+        hidden_channels_dec,
+        hidden_layers_dec,
+        hidden_channels_map,
+        hidden_layers_map,
+        output_channels,  # Per timestep
+        multitask,
+        window=7,
+        interpolation="cubic",
+        # interpolation="linear",
+        prediction="regression",
+        invariance=True,
     ):
         super(NeuralCDE, self).__init__()
 
@@ -84,49 +88,67 @@ class NeuralCDE(torch.nn.Module):
         )
 
         # Function
-        self.cde_func_encoder = CDEFunc(input_channels_x, hidden_channels_x, hidden_channels_enc, hidden_layers_enc)
-        self.cde_func_decoder = CDEFunc(4, hidden_channels_x, hidden_channels_dec, hidden_layers_dec)
+        self.cde_func_encoder = CDEFunc(
+            input_channels_x, hidden_channels_x, hidden_channels_enc, hidden_layers_enc
+        )
+        self.cde_func_decoder = CDEFunc(
+            4, hidden_channels_x, hidden_channels_dec, hidden_layers_dec
+        )
 
         self.decoder = torch.nn.Sequential(
-                torch.nn.Linear(hidden_channels_x, hidden_channels_map),
-                torch.nn.ReLU(),
-            )
+            torch.nn.Linear(hidden_channels_x, hidden_channels_map),
+            torch.nn.ReLU(),
+        )
 
         # Linear output layer
         if prediction == "regression":
             if hidden_layers_map == 1:
-                self.outcome = nn.Sequential(torch.nn.Linear(hidden_channels_x, output_channels))
+                self.outcome = nn.Sequential(
+                    torch.nn.Linear(hidden_channels_x, output_channels)
+                )
             else:
                 layers = []
                 layers.append(torch.nn.Linear(hidden_channels_x, hidden_channels_map))
                 layers.append(torch.nn.ReLU())
                 for i in range(hidden_layers_map - 2):
-                    layers.append(torch.nn.Linear(hidden_channels_map, hidden_channels_map))
+                    layers.append(
+                        torch.nn.Linear(hidden_channels_map, hidden_channels_map)
+                    )
                     layers.append(torch.nn.ReLU())
                 layers.append(torch.nn.Linear(hidden_channels_map, output_channels))
                 self.outcome = nn.Sequential(*layers)
 
             if multitask:
                 if hidden_layers_map == 1:
-                    self.intensity = nn.Sequential(torch.nn.Linear(hidden_channels_x, output_channels))
+                    self.intensity = nn.Sequential(
+                        torch.nn.Linear(hidden_channels_x, output_channels)
+                    )
                 else:
                     layers = []
-                    layers.append(torch.nn.Linear(hidden_channels_x, hidden_channels_map))
+                    layers.append(
+                        torch.nn.Linear(hidden_channels_x, hidden_channels_map)
+                    )
                     layers.append(torch.nn.ReLU())
                     for i in range(hidden_layers_map - 2):
-                        layers.append(torch.nn.Linear(hidden_channels_map, hidden_channels_map))
+                        layers.append(
+                            torch.nn.Linear(hidden_channels_map, hidden_channels_map)
+                        )
                         layers.append(torch.nn.ReLU())
                     layers.append(torch.nn.Linear(hidden_channels_map, output_channels))
                     self.intensity = nn.Sequential(*layers)
         elif prediction == "classification":
             if hidden_layers_map == 1:
-                self.outcome = nn.Sequential(torch.nn.Linear(hidden_channels_x, output_channels))
+                self.outcome = nn.Sequential(
+                    torch.nn.Linear(hidden_channels_x, output_channels)
+                )
             else:
                 layers = []
                 layers.append(torch.nn.Linear(hidden_channels_x, hidden_channels_map))
                 layers.append(torch.nn.ReLU())
                 for i in range(hidden_layers_map - 2):
-                    layers.append(torch.nn.Linear(hidden_channels_map, hidden_channels_map))
+                    layers.append(
+                        torch.nn.Linear(hidden_channels_map, hidden_channels_map)
+                    )
                     layers.append(torch.nn.ReLU())
                 layers.append(torch.nn.Linear(hidden_channels_map, output_channels))
                 self.outcome = nn.Sequential(*layers)
@@ -175,8 +197,13 @@ class NeuralCDE(torch.nn.Module):
                 t=x.interval,
                 adjoint=True,
                 method="euler",
-                options=dict(step_size=1.)      # Default -- This works good given discrete data
-            ), dtype=torch.float, device=device)
+                options=dict(
+                    step_size=1.0
+                ),  # Default -- This works good given discrete data
+            ),
+            dtype=torch.float,
+            device=device,
+        )
 
         ######################
         # Both the initial value and the terminal value are returned from cdeint;
@@ -192,8 +219,11 @@ class NeuralCDE(torch.nn.Module):
                 t=treat.grid_points,
                 adjoint=True,
                 method="euler",
-                options=dict(step_size=1.)
-            ), dtype=torch.float, device=device)
+                options=dict(step_size=1.0),
+            ),
+            dtype=torch.float,
+            device=device,
+        )
 
         # Get predictions based on z_hat:
         if self.prediction == "regression":
@@ -220,4 +250,6 @@ class NeuralCDE(torch.nn.Module):
             return pred_obs_sigmoid, pred_obs, pred_obs_sigmoid  # int_obs[:, -1]
 
         else:
-            return NotImplementedError("Only regression and classification are implemented")
+            return NotImplementedError(
+                "Only regression and classification are implemented"
+            )

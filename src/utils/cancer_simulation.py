@@ -15,18 +15,19 @@ import logging
 import os
 import pickle
 
+import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib
 import seaborn as sns
-from scipy.stats import (
-    truncnorm,  # we need to sample from truncated normal distributions
-)
 from scipy.special import expit
+from scipy.stats import (
+    truncnorm,
+)  # we need to sample from truncated normal distributions
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Simulation Constants
+
 
 # Spherical calculations - tumours assumed to be spherical per Winer-Muram et al 2002.
 # URL: https://pubs.rsna.org/doi/10.1148/radiol.2233011026?url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&rfr_dat=cr_pub%3Dpubmed
@@ -70,7 +71,9 @@ EPS = 1e-8
 # Simulation Functions
 
 
-def get_confounding_params(num_patients, chemo_coeff, radio_coeff, obs_coeff, intensity_cov, num_time_steps):
+def get_confounding_params(
+    num_patients, chemo_coeff, radio_coeff, obs_coeff, intensity_cov, num_time_steps
+):
     """
 
     Get original simulation parameters, and add extra ones to control confounding
@@ -118,10 +121,10 @@ def get_confounding_params(num_patients, chemo_coeff, radio_coeff, obs_coeff, in
         # i + 1 to have no treatment on timestep = 0
         # 5 weeks of weekly chemo
         if (i + 1) % 7 == 0 and i > 21 and i + 1 <= 56:
-            seq_chemo[i] = 1.
+            seq_chemo[i] = 1.0
         # From 6 weeks: weekly radio
         if (i + 1) % 7 == 0 and i > 21 and i + 1 > 56:
-            seq_radio[i] = 1.
+            seq_radio[i] = 1.0
         if i > 91:
             break
     # - Combined treatment: chemo + radio
@@ -130,9 +133,9 @@ def get_confounding_params(num_patients, chemo_coeff, radio_coeff, obs_coeff, in
     for i in range(num_time_steps):
         # Every two weeks chemo and radio
         if (i + 1) % 14 == 0 and i > 21:
-            com_chemo[i] = 1.
+            com_chemo[i] = 1.0
         if (i + 1) % 14 == 0 and i > 21:
-            com_radio[i] = 1.
+            com_radio[i] = 1.0
         if i > 91:
             break
 
@@ -155,7 +158,9 @@ def get_confounding_params(num_patients, chemo_coeff, radio_coeff, obs_coeff, in
     basic_params["patient_arms"] = patient_arms
 
     # Get intensity covariates
-    basic_params["intensity_covariates"] = np.random.normal(0, 1, (num_patients, intensity_cov))
+    basic_params["intensity_covariates"] = np.random.normal(
+        0, 1, (num_patients, intensity_cov)
+    )
 
     return basic_params
 
@@ -248,7 +253,6 @@ def get_standard_params(num_patients):  # additional params
     while (
         len(simulated_params) < num_patients
     ):  # Keep on simulating till we get the right number of params
-
         param_holder = np.random.multivariate_normal(
             alpha_rho_mean,
             alpha_rho_cov,
@@ -256,7 +260,6 @@ def get_standard_params(num_patients):  # additional params
         )
 
         for i in range(param_holder.shape[0]):
-
             # Ensure that all params fulfill conditions
             if (
                 param_holder[i, 0] > parameter_lower_bound
@@ -316,7 +319,9 @@ def get_standard_params(num_patients):  # additional params
     return output_params
 
 
-def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False, max_intensity=1):
+def simulate(
+    simulation_params, assigned_actions=None, intensity_cov_only=False, max_intensity=1
+):
     """
     Core routine to generate simulation paths
 
@@ -350,7 +355,9 @@ def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False,
     beta_cs = simulation_params["beta_c"]
     Ks = simulation_params["K"]
     patient_types = simulation_params["patient_types"]
-    window_size = simulation_params["window_size"]  # controls the lookback of the treatment assignment policy
+    window_size = simulation_params[
+        "window_size"
+    ]  # controls the lookback of the treatment assignment policy
 
     # Coefficients for treatment assignment probabilities
     chemo_sigmoid_intercepts = simulation_params["chemo_sigmoid_intercepts"]
@@ -409,13 +416,14 @@ def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False,
         # Setup cell volume
         b_death = False
         b_recover = False
-        for t in range(0, num_time_steps - 1):  # "- 1" as outcomes are always of the next step
-
+        for t in range(
+            0, num_time_steps - 1
+        ):  # "- 1" as outcomes are always of the next step
             current_chemo_dose = 0.0
             previous_chemo_dose = 0.0 if t == 0 else chemo_dosage[i, t - 1]
 
             # Action probabilities + death or recovery simulations
-            cancer_volume_used = cancer_volume[i, max(t - window_size, 0): t + 1]
+            cancer_volume_used = cancer_volume[i, max(t - window_size, 0) : t + 1]
             cancer_diameter_used = np.array(
                 [calc_diameter(vol) for vol in cancer_volume_used],
             ).mean()  # mean diameter over 15 days
@@ -449,12 +457,25 @@ def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False,
 
             # Observation probability
             if intensity_cov_only:
-                obs_prob = expit(obs_coeff * (
-                        np.sum(intensity_coefficients * intensity_covariates[i, :])  # 0 when no covariates included
-                        ))
+                obs_prob = expit(
+                    obs_coeff
+                    * (
+                        np.sum(
+                            intensity_coefficients * intensity_covariates[i, :]
+                        )  # 0 when no covariates included
+                    )
+                )
             else:
-                obs_prob = max_intensity / (1.0 + np.exp(
-                    -obs_coeff * (obs_sigmoid_betas[i] * (cancer_metric_used - obs_sigmoid_intercepts[i]))))
+                obs_prob = max_intensity / (
+                    1.0
+                    + np.exp(
+                        -obs_coeff
+                        * (
+                            obs_sigmoid_betas[i]
+                            * (cancer_metric_used - obs_sigmoid_intercepts[i])
+                        )
+                    )
+                )
 
             obs_probabilities[i, t] = obs_prob
 
@@ -500,11 +521,11 @@ def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False,
         sequence_lengths[i] = int(t + 1)
 
     # Plot some outputs:
-    matplotlib.rcParams.update({'font.size': 16})
-    plt.style.use('science')
-    linestyles = ['-', '--', '-.', ':', (0, (1, 1))]
-    markers = ['.', 'o', '+', 'x', '*']
-    colors = ['green', 'red', 'black', 'blue', 'orange']
+    matplotlib.rcParams.update({"font.size": 16})
+    plt.style.use("science")
+    linestyles = ["-", "--", "-.", ":", (0, (1, 1))]
+    markers = [".", "o", "+", "x", "*"]
+    colors = ["green", "red", "black", "blue", "orange"]
 
     # plt.figure(figsize=(5, 3))
     # for i in range(min(8, cancer_volume.shape[0])):
@@ -579,7 +600,13 @@ def simulate(simulation_params, assigned_actions=None, intensity_cov_only=False,
 
 
 def get_scaling_params(sim):
-    real_idx = ["cancer_volume", "chemo_dosage", "radio_dosage", "chemo_application", "radio_application"]
+    real_idx = [
+        "cancer_volume",
+        "chemo_dosage",
+        "radio_dosage",
+        "chemo_application",
+        "radio_application",
+    ]
 
     means = {}
     stds = {}
@@ -627,7 +654,7 @@ def get_cancer_sim_data(
     def _generate():
         num_time_steps = 120
 
-        print('Generating for time steps: ', num_time_steps)
+        print("Generating for time steps: ", num_time_steps)
 
         # Coefficients for the intensity covariates
         intensity_coefficients = np.random.uniform(-1, 1, intensity_cov)
@@ -644,8 +671,12 @@ def get_cancer_sim_data(
         params["window_size"] = window_size
         params["obs_coeff"] = obs_coeff
         params["intensity_coefficients"] = intensity_coefficients
-        training_data = simulate(params, assigned_actions=params["assigned_actions"],
-                                 intensity_cov_only=intensity_cov_only, max_intensity=max_intensity)
+        training_data = simulate(
+            params,
+            assigned_actions=params["assigned_actions"],
+            intensity_cov_only=intensity_cov_only,
+            max_intensity=max_intensity,
+        )
 
         # Validation set
         params = get_confounding_params(
@@ -659,8 +690,12 @@ def get_cancer_sim_data(
         params["window_size"] = window_size
         params["obs_coeff"] = obs_coeff
         params["intensity_coefficients"] = intensity_coefficients
-        validation_data = simulate(params, assigned_actions=params["assigned_actions"],
-                                   intensity_cov_only=intensity_cov_only, max_intensity=max_intensity)
+        validation_data = simulate(
+            params,
+            assigned_actions=params["assigned_actions"],
+            intensity_cov_only=intensity_cov_only,
+            max_intensity=max_intensity,
+        )
 
         # Test set
         params = get_confounding_params(
@@ -674,11 +709,19 @@ def get_cancer_sim_data(
         params["window_size"] = window_size
         params["obs_coeff"] = obs_coeff
         params["intensity_coefficients"] = intensity_coefficients
-        test_data_factuals = simulate(params, assigned_actions=params["assigned_actions"],
-                                      intensity_cov_only=intensity_cov_only, max_intensity=max_intensity)
+        test_data_factuals = simulate(
+            params,
+            assigned_actions=params["assigned_actions"],
+            intensity_cov_only=intensity_cov_only,
+            max_intensity=max_intensity,
+        )
         # Only one counterfactual, so we can use standard simulate with the SAME params but COUNTERFACTUAL actions
-        test_data_counterfactuals = simulate(params, assigned_actions=params["counterfactual_actions"],
-                                             intensity_cov_only=intensity_cov_only, max_intensity=max_intensity)
+        test_data_counterfactuals = simulate(
+            params,
+            assigned_actions=params["counterfactual_actions"],
+            intensity_cov_only=intensity_cov_only,
+            max_intensity=max_intensity,
+        )
 
         scaling_data = get_scaling_params(training_data)
 

@@ -23,7 +23,6 @@ class EarlyStopping:
         self.path = path
 
     def __call__(self, val_loss, model):
-
         score = -val_loss
 
         # first epoch

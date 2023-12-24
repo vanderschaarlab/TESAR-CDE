@@ -2,6 +2,7 @@
 
 import pickle
 import random
+
 import numpy as np
 import torch
 import torchcde
@@ -111,9 +112,10 @@ def get_processed_data(raw_sim_data, scaling_params):
             ):
                 # time_since_treat_both = 0
                 one_hot_treatments[patient_id][timestep] = [0, 0, 0, 1]
-            elif (  # Not observed, i.e., no treatment applied (all treatments are assumed to be observed)
-                np.isnan(treatments[patient_id][timestep][0])
-                or np.isnan(treatments[patient_id][timestep][1])
+            elif np.isnan(  # Not observed, i.e., no treatment applied (all treatments are assumed to be observed)
+                treatments[patient_id][timestep][0]
+            ) or np.isnan(
+                treatments[patient_id][timestep][1]
             ):
                 one_hot_treatments[patient_id][timestep] = [1, 0, 0, 0]
 
@@ -122,44 +124,64 @@ def get_processed_data(raw_sim_data, scaling_params):
     one_hot_treatments_future = one_hot_treatments[:, :, :]
 
     # Current covariates are the patient's current cancer volume and type; optionally also the intensity covariates
-    if data_x_intensity.shape[-1] == 0:  # Do not add intensity covariates (as there are none)
-        current_covariates = np.concatenate([cancer_volume[:, :-max_horizon, np.newaxis],  # current output
-                                             patient_types[:, :-max_horizon, np.newaxis],
-                                             ],
-                                            axis=-1)
+    if (
+        data_x_intensity.shape[-1] == 0
+    ):  # Do not add intensity covariates (as there are none)
+        current_covariates = np.concatenate(
+            [
+                cancer_volume[:, :-max_horizon, np.newaxis],  # current output
+                patient_types[:, :-max_horizon, np.newaxis],
+            ],
+            axis=-1,
+        )
     else:
-        current_covariates = np.concatenate([cancer_volume[:, :-max_horizon, np.newaxis],  # current output
-                                             patient_types[:, :-max_horizon, np.newaxis],
-                                             data_x_intensity[:, :-max_horizon, :],
-                                             ],
-                                            axis=-1)
+        current_covariates = np.concatenate(
+            [
+                cancer_volume[:, :-max_horizon, np.newaxis],  # current output
+                patient_types[:, :-max_horizon, np.newaxis],
+                data_x_intensity[:, :-max_horizon, :],
+            ],
+            axis=-1,
+        )
 
     # Ground truth observation probabilities:
     obs_probabilities = raw_sim_data["obs_probabilities"]
-    obs_prob_one_step = obs_probabilities[:, 1:-max_horizon + 1, np.newaxis]
-    obs_prob_two_step = obs_probabilities[:, 2:-max_horizon + 2, np.newaxis]
-    obs_prob_three_step = obs_probabilities[:, 3:-max_horizon + 3, np.newaxis]
-    obs_prob_four_step = obs_probabilities[:, 4:-max_horizon + 4, np.newaxis]
+    obs_prob_one_step = obs_probabilities[:, 1 : -max_horizon + 1, np.newaxis]
+    obs_prob_two_step = obs_probabilities[:, 2 : -max_horizon + 2, np.newaxis]
+    obs_prob_three_step = obs_probabilities[:, 3 : -max_horizon + 3, np.newaxis]
+    obs_prob_four_step = obs_probabilities[:, 4 : -max_horizon + 4, np.newaxis]
     obs_prob_five_step = obs_probabilities[:, 5:, np.newaxis]
-    obs_probabilities = np.concatenate((obs_prob_one_step,
-                                        obs_prob_two_step,
-                                        obs_prob_three_step,
-                                        obs_prob_four_step,
-                                        obs_prob_five_step), axis=-1)
+    obs_probabilities = np.concatenate(
+        (
+            obs_prob_one_step,
+            obs_prob_two_step,
+            obs_prob_three_step,
+            obs_prob_four_step,
+            obs_prob_five_step,
+        ),
+        axis=-1,
+    )
 
     # time_covariates = np.concatenate([intensity[:, 0:, np.newaxis]], axis=-1)
-    outcome_one_step = cancer_volume[:, 1:-max_horizon + 1, np.newaxis]
-    outcome_two_step = cancer_volume[:, 2:-max_horizon + 2, np.newaxis]
-    outcome_three_step = cancer_volume[:, 3:-max_horizon + 3, np.newaxis]
-    outcome_four_step = cancer_volume[:, 4:-max_horizon + 4, np.newaxis]
+    outcome_one_step = cancer_volume[:, 1 : -max_horizon + 1, np.newaxis]
+    outcome_two_step = cancer_volume[:, 2 : -max_horizon + 2, np.newaxis]
+    outcome_three_step = cancer_volume[:, 3 : -max_horizon + 3, np.newaxis]
+    outcome_four_step = cancer_volume[:, 4 : -max_horizon + 4, np.newaxis]
     outcome_five_step = cancer_volume[:, 5:, np.newaxis]
-    outputs = np.concatenate((outcome_one_step,
-                              outcome_two_step,
-                              outcome_three_step,
-                              outcome_four_step,
-                              outcome_five_step), axis=-1)
+    outputs = np.concatenate(
+        (
+            outcome_one_step,
+            outcome_two_step,
+            outcome_three_step,
+            outcome_four_step,
+            outcome_five_step,
+        ),
+        axis=-1,
+    )
 
-    output_means = mean[["cancer_volume"]].values.flatten()[0]  # because we only need scalars here
+    output_means = mean[["cancer_volume"]].values.flatten()[
+        0
+    ]  # because we only need scalars here
     output_stds = std[["cancer_volume"]].values.flatten()[0]
 
     # Add active entires (observed time steps)
@@ -198,8 +220,8 @@ def process_data(pickle_map):
     # load data from pickle_map
     training_data = pickle_map["training_data"]
     validation_data = pickle_map["validation_data"]
-    test_cf_data = pickle_map["test_data"]     # Counterfactuals
-    test_f_data = pickle_map["test_data_factuals"]      # Factuals
+    test_cf_data = pickle_map["test_data"]  # Counterfactuals
+    test_f_data = pickle_map["test_data_factuals"]  # Factuals
     scaling_data = pickle_map["scaling_data"]
 
     # get processed data
@@ -253,14 +275,7 @@ def data_to_torch_tensor(data, sample_prop=1, time_concat=-1):
     data_tr_tau = torch.from_numpy(data_tr_tau[:, :, :])
     data_obs_prob = torch.from_numpy(obs_prob[:, :])
 
-    return (
-        data_X,
-        data_tr,
-        data_y,
-        data_ae,
-        data_tr_tau,
-        data_obs_prob
-    )
+    return (data_X, data_tr, data_y, data_ae, data_tr_tau, data_obs_prob)
 
 
 def write_to_file(contents, filename):

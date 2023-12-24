@@ -6,14 +6,14 @@ import os
 import pickle
 from copy import deepcopy
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torchcde
 from torch.nn import functional as F
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from src.models.CDE_model import NeuralCDE
 from src.utils.data_utils import data_to_torch_tensor
@@ -42,7 +42,6 @@ class trainer:
         ground_truth_iw=True,
         multitask=False,
     ):
-
         self.run = run
         self.model = None
         self.multistep_model = None
@@ -92,7 +91,6 @@ class trainer:
             batch_iw,
             _,
         ) in train_dataloader:
-
             batch_coeffs_x = torch.tensor(
                 batch_coeffs_x,
                 dtype=torch.float,
@@ -126,7 +124,11 @@ class trainer:
             if model.prediction == "regression":
                 pred_y, pred_obs = model(batch_coeffs_x, treat, self.device)
 
-                if self.importance_weighting and not self.ground_truth_iw and self.multitask:
+                if (
+                    self.importance_weighting
+                    and not self.ground_truth_iw
+                    and self.multitask
+                ):
                     # Use learned weights from other arm -- overwrite obs_prob
                     # Intensity loss:
                     obs_loss = observation_loss(pred_obs, active_entries)
@@ -215,9 +217,8 @@ class trainer:
                 batch_val_treat,
                 batch_ae_val,
                 batch_iw_val,
-                _
+                _,
             ) in test_dataloader:
-
                 batch_coeffs_x_val = torch.tensor(
                     batch_coeffs_x_val,
                     dtype=torch.float,
@@ -249,28 +250,46 @@ class trainer:
                 )
 
                 if model.prediction == "regression":
-                    pred_y_val, pred_obs_val = model(batch_coeffs_x_val, treat_val, self.device)
+                    pred_y_val, pred_obs_val = model(
+                        batch_coeffs_x_val, treat_val, self.device
+                    )
 
-                    if self.importance_weighting and not self.ground_truth_iw and self.multitask:
-                        obs_loss_val = observation_loss(pred_obs_val, active_entries_val)
+                    if (
+                        self.importance_weighting
+                        and not self.ground_truth_iw
+                        and self.multitask
+                    ):
+                        obs_loss_val = observation_loss(
+                            pred_obs_val, active_entries_val
+                        )
 
                         # Get weights, stabilize and detach:
                         obs_prob_val = torch.sigmoid(pred_obs_val)
                         obs_prob_val = torch.clip(obs_prob_val, self.cutoff)
 
                         # compute norm mse loss - outcomes loss
-                        mse_loss_val = mse(outcomes_val, pred_y_val, active_entries_val, obs_prob_val)
+                        mse_loss_val = mse(
+                            outcomes_val, pred_y_val, active_entries_val, obs_prob_val
+                        )
 
-                        batch_loss_val = (1 - self.alpha) * mse_loss_val + self.alpha * obs_loss_val
+                        batch_loss_val = (
+                            1 - self.alpha
+                        ) * mse_loss_val + self.alpha * obs_loss_val
                         # batch_loss_val = mse_loss_val + obs_loss_val
                     else:
-                        batch_loss_val = mse(outcomes_val, pred_y_val, active_entries_val, obs_prob_val)
+                        batch_loss_val = mse(
+                            outcomes_val, pred_y_val, active_entries_val, obs_prob_val
+                        )
 
                     # print(torch.mean((torch.sigmoid(pred_int_val) - active_entries_val)**2))
                 elif model.prediction == "classification":
-                    _, pred_obs_val, _ = model(batch_coeffs_x_val, treat_val, self.device)
+                    _, pred_obs_val, _ = model(
+                        batch_coeffs_x_val, treat_val, self.device
+                    )
 
-                    batch_loss_val = observation_loss(pred_obs_val, active_entries_val[:, :, None])
+                    batch_loss_val = observation_loss(
+                        pred_obs_val, active_entries_val[:, :, None]
+                    )
                 else:
                     NotImplementedError("Only regression or classification allowed.")
 
@@ -279,14 +298,29 @@ class trainer:
 
         return model, test_losses_total
 
-    def prepare_dataloader(self, data, batch_size=32, importance_weights=None, return_tensors=False,
-                           window=7, observed_only=False, process_weights=True):
+    def prepare_dataloader(
+        self,
+        data,
+        batch_size=32,
+        importance_weights=None,
+        return_tensors=False,
+        window=7,
+        observed_only=False,
+        process_weights=True,
+    ):
         horizon = 5
 
-        data_X, data_tr, data_y, data_ae, data_tr_tau, data_obs_prob = data_to_torch_tensor(
+        (
+            data_X,
+            data_tr,
+            data_y,
+            data_ae,
+            data_tr_tau,
+            data_obs_prob,
+        ) = data_to_torch_tensor(
             data,
             sample_prop=self.sample_proportion,
-        )   # data_A denotes previous treatment, data_tr is current treatment
+        )  # data_A denotes previous treatment, data_tr is current treatment
 
         # Add importance weights if in data (ground truth or estimated empirically)
         if importance_weights is None:
@@ -294,20 +328,32 @@ class trainer:
         elif not torch.is_tensor(importance_weights):
             importance_weights = torch.from_numpy(importance_weights)
 
-        data_concat = torch.cat((data_X, data_tr), 2)  # X covariates and treatment per timestep
+        data_concat = torch.cat(
+            (data_X, data_tr), 2
+        )  # X covariates and treatment per timestep
 
         data_shape = list(data_concat.shape)
 
         # Split for next time step prediction based on window
-        total_X = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), window, data_shape[2]))
+        total_X = torch.Tensor(
+            size=(data_shape[0] * (data_shape[1] - window), window, data_shape[2])
+        )
         total_y = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), horizon))
-        total_ae = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), horizon))
-        total_tr = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), horizon, 4))  # 4 treatments (one-hot)
+        total_ae = torch.Tensor(
+            size=(data_shape[0] * (data_shape[1] - window), horizon)
+        )
+        total_tr = torch.Tensor(
+            size=(data_shape[0] * (data_shape[1] - window), horizon, 4)
+        )  # 4 treatments (one-hot)
         if process_weights:
-            total_iw = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), horizon))
+            total_iw = torch.Tensor(
+                size=(data_shape[0] * (data_shape[1] - window), horizon)
+            )
         else:
             total_iw = importance_weights
-        total_obs_prob = torch.Tensor(size=(data_shape[0] * (data_shape[1] - window), horizon))
+        total_obs_prob = torch.Tensor(
+            size=(data_shape[0] * (data_shape[1] - window), horizon)
+        )
         print("Splitting data for step(s) prediction(s) -- Max horizon = 5")
         # For each patient:
         for i in range(data_shape[0]):
@@ -324,7 +370,7 @@ class trainer:
                 y = torch.clone(data_y[i, j, :])
                 ae = torch.clone(data_ae[i, j, :])
                 # Treatments
-                tr = torch.clone(data_tr_tau[i, j:j+horizon, :])
+                tr = torch.clone(data_tr_tau[i, j : j + horizon, :])
                 # Importance weights
                 if process_weights:
                     iw = torch.clone(importance_weights[i, j])
@@ -341,7 +387,9 @@ class trainer:
 
         if observed_only:
             # Consider only observed outcomes + histories:
-            observed_outcomes, _ = torch.nonzero((~total_y.isnan()).float(), as_tuple=True)
+            observed_outcomes, _ = torch.nonzero(
+                (~total_y.isnan()).float(), as_tuple=True
+            )
             total_X = total_X[observed_outcomes]
             total_y = total_y[observed_outcomes]
             total_tr = total_tr[observed_outcomes]
@@ -355,9 +403,13 @@ class trainer:
 
         if return_tensors:  # For final validation, testing and predict
             return total_X, total_y, total_tr, total_ae, total_iw, total_obs_prob
-        else:   # For training
-            dataset = torch.utils.data.TensorDataset(total_X, total_y, total_tr, total_ae, total_iw, total_obs_prob)
-            dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+        else:  # For training
+            dataset = torch.utils.data.TensorDataset(
+                total_X, total_y, total_tr, total_ae, total_iw, total_obs_prob
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset, batch_size=batch_size, shuffle=True, drop_last=False
+            )
             return dataloader, data_shape
 
     def fit(self, train_data, validation_data, epochs, patience, batch_size):
@@ -389,7 +441,7 @@ class trainer:
         elif self.multitask:  # Multitask - All weight = 1 as they will be learned later
             obs_probabilities_train = np.ones_like(train_data["obs_probabilities"])
             obs_probabilities_val = np.ones_like(validation_data["obs_probabilities"])
-        else:       # Two step
+        else:  # Two step
             early_stopping = EarlyStopping(patience=patience, delta=0.0001)
 
             # create dataloaders
@@ -425,8 +477,12 @@ class trainer:
             obs_classifier = obs_classifier.to(self.device)
 
             learning_rate = 5e-4
-            optimizer_classifier = torch.optim.Adam(obs_classifier.parameters(), lr=learning_rate, weight_decay=1e-3)
-            print('Learning rate classifier:', optimizer_classifier.param_groups[0]['lr'])
+            optimizer_classifier = torch.optim.Adam(
+                obs_classifier.parameters(), lr=learning_rate, weight_decay=1e-3
+            )
+            print(
+                "Learning rate classifier:", optimizer_classifier.param_groups[0]["lr"]
+            )
 
             self.run.watch(obs_classifier, log="all")
 
@@ -434,7 +490,6 @@ class trainer:
             epochs = epochs
 
             for epoch in tqdm(range(epochs)):
-
                 logging.info(f"Training epoch: {epoch}")
                 # put into train mode
                 obs_classifier, train_losses_obs, _, _ = self._train(
@@ -446,16 +501,18 @@ class trainer:
                 # zero grad check out + early stopping
                 logging.info(f"Validation epoch: {epoch}")
                 obs_classifier, val_losses_obs = self._test(
-                    test_dataloader=val_dataloader,
-                    model=obs_classifier
+                    test_dataloader=val_dataloader, model=obs_classifier
                 )
 
                 tqdm.write(
                     f"Epoch observations: {epoch}: "
                     f"Training loss observations: {np.average(train_losses_obs)}; "
-                    f"Val loss observations: {np.average(val_losses_obs)}")
+                    f"Val loss observations: {np.average(val_losses_obs)}"
+                )
 
-                if np.average(train_losses_obs,) == float("nan"):
+                if np.average(
+                    train_losses_obs,
+                ) == float("nan"):
                     raise ValueError("Exiting run...")
 
                 self.run.log(
@@ -483,7 +540,9 @@ class trainer:
                 dtype=torch.float,
                 device=self.device,
             )
-            obs_probabilities_train, _, _ = obs_classifier(x_train, treat_train, self.device)
+            obs_probabilities_train, _, _ = obs_classifier(
+                x_train, treat_train, self.device
+            )
 
             x_val = torch.tensor(
                 val_dataloader.dataset.tensors[0],
@@ -525,7 +584,8 @@ class trainer:
                 device=self.device,
             )
             rmse_obs_prob_val = torch.sqrt(
-                torch.mean((true_obs_probabilities_val - obs_probabilities_val).pow(2)))
+                torch.mean((true_obs_probabilities_val - obs_probabilities_val).pow(2))
+            )
             print(f"RMSE Validation Intensities: {rmse_obs_prob_val}")
 
             self.run.log({f"RMSE Validation Intensities": rmse_obs_prob_val})
@@ -546,7 +606,11 @@ class trainer:
             observed_only = False
         else:
             observed_only = True
-        if self.importance_weighting and not self.ground_truth_iw and not self.multitask:  # Two-step: do not process weights
+        if (
+            self.importance_weighting
+            and not self.ground_truth_iw
+            and not self.multitask
+        ):  # Two-step: do not process weights
             process_weights = False
         else:
             process_weights = True
@@ -586,23 +650,33 @@ class trainer:
             window=self.window,
         )
 
-        print('Number of parameters:', sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values()))
+        print(
+            "Number of parameters:",
+            sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values()),
+        )
 
         model = model.to(self.device)
 
         learning_rate = 5e-4
-        optimizer = torch.optim.Adam([  # All but intensity
-            {"params": model.embed_x.parameters()},
-            {"params": model.cde_func_encoder.parameters()},
-            {"params": model.cde_func_decoder.parameters()},
-            {"params": model.outcome.parameters()},
-        ], lr=learning_rate, weight_decay=1e-3)
-        if self.importance_weighting and not self.ground_truth_iw and self.multitask:  # Special optim for intensity
-            optimizer_intensity = torch.optim.Adam(model.intensity.parameters(), lr=learning_rate,
-                                                    weight_decay=1e-3)
+        optimizer = torch.optim.Adam(
+            [  # All but intensity
+                {"params": model.embed_x.parameters()},
+                {"params": model.cde_func_encoder.parameters()},
+                {"params": model.cde_func_decoder.parameters()},
+                {"params": model.outcome.parameters()},
+            ],
+            lr=learning_rate,
+            weight_decay=1e-3,
+        )
+        if (
+            self.importance_weighting and not self.ground_truth_iw and self.multitask
+        ):  # Special optim for intensity
+            optimizer_intensity = torch.optim.Adam(
+                model.intensity.parameters(), lr=learning_rate, weight_decay=1e-3
+            )
         else:
             optimizer_intensity = None
-        print('Learning rate:', optimizer.param_groups[0]['lr'])
+        print("Learning rate:", optimizer.param_groups[0]["lr"])
 
         self.run.watch(model, log="all")
 
@@ -610,7 +684,6 @@ class trainer:
         epochs = epochs
 
         for epoch in tqdm(range(epochs)):
-
             logging.info(f"Training epoch: {epoch}")
             # Train iteration
             model, train_losses_total, train_losses_mse, train_losses_obs = self._train(
@@ -659,27 +732,53 @@ class trainer:
                 break
 
         # Visualize results for validation set:
-        val_concat = torch.tensor(val_dataloader.dataset.tensors[0], dtype=torch.float, device=device)
-        val_y = torch.tensor(val_dataloader.dataset.tensors[1], dtype=torch.float, device=device)
-        val_treat = torch.tensor(val_dataloader.dataset.tensors[2], dtype=torch.float, device=device)
-        val_ae = torch.tensor(val_dataloader.dataset.tensors[3], dtype=torch.float, device=device)
-        total_obs_prob = torch.tensor(val_dataloader.dataset.tensors[5], dtype=torch.float, device=device)
+        val_concat = torch.tensor(
+            val_dataloader.dataset.tensors[0], dtype=torch.float, device=device
+        )
+        val_y = torch.tensor(
+            val_dataloader.dataset.tensors[1], dtype=torch.float, device=device
+        )
+        val_treat = torch.tensor(
+            val_dataloader.dataset.tensors[2], dtype=torch.float, device=device
+        )
+        val_ae = torch.tensor(
+            val_dataloader.dataset.tensors[3], dtype=torch.float, device=device
+        )
+        total_obs_prob = torch.tensor(
+            val_dataloader.dataset.tensors[5], dtype=torch.float, device=device
+        )
 
         pred_y_val, pred_obs_val = self.model(val_concat, val_treat, device)
 
         outcomes_val = val_y
         ae_val = val_ae
 
-        print('MSE (val):\t\t', torch.mean(torch.square(outcomes_val[ae_val == 1] - pred_y_val[ae_val == 1])).item())
+        print(
+            "MSE (val):\t\t",
+            torch.mean(
+                torch.square(outcomes_val[ae_val == 1] - pred_y_val[ae_val == 1])
+            ).item(),
+        )
         for i in range(5):
-            print('MSE (val)', i, ':\t', torch.mean(torch.square(outcomes_val[:, i][(ae_val == 1)[:, i]] - pred_y_val[:, i][(ae_val == 1)[:, i]])).item())
+            print(
+                "MSE (val)",
+                i,
+                ":\t",
+                torch.mean(
+                    torch.square(
+                        outcomes_val[:, i][(ae_val == 1)[:, i]]
+                        - pred_y_val[:, i][(ae_val == 1)[:, i]]
+                    )
+                ).item(),
+            )
 
         # Check intensities:
         if self.importance_weighting and not self.ground_truth_iw and self.multitask:
             obs_prob_val = torch.sigmoid(pred_obs_val)
             rmse_obs_prob_val = torch.sqrt(
-                torch.mean((total_obs_prob - obs_prob_val).pow(2)))
-            print(f"RMSE Validation Intensities: "f"{rmse_obs_prob_val}")
+                torch.mean((total_obs_prob - obs_prob_val).pow(2))
+            )
+            print(f"RMSE Validation Intensities: " f"{rmse_obs_prob_val}")
             self.run.log({f"RMSE Validation Intensities": rmse_obs_prob_val})
 
         # colors = ['green', 'red', 'black', 'blue', 'orange']
@@ -705,13 +804,19 @@ class trainer:
         #     plt.show()
 
     def predict(self, test_data, label=None):
-
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         logging.info(f"Predicting with: {device}")
 
         # test_processed
-        test_concat, test_y, test_treat, total_ae, _, test_obs_prob = self.prepare_dataloader(
+        (
+            test_concat,
+            test_y,
+            test_treat,
+            total_ae,
+            _,
+            test_obs_prob,
+        ) = self.prepare_dataloader(
             data=test_data,
             return_tensors=True,
             observed_only=False,
@@ -728,10 +833,10 @@ class trainer:
         if self.importance_weighting and not (self.ground_truth_iw):
             if self.multitask:
                 pred_obs = torch.sigmoid(pred_obs)
-                mse_intensities = torch.mean((pred_obs - test_obs_prob)**2)
+                mse_intensities = torch.mean((pred_obs - test_obs_prob) ** 2)
             else:
                 pred_obs, _, _ = self.obs_classifier(test_concat, test_treat, device)
-                mse_intensities = torch.mean((pred_obs[:, :, 0] - test_obs_prob)**2)
+                mse_intensities = torch.mean((pred_obs[:, :, 0] - test_obs_prob) ** 2)
         else:
             mse_intensities = torch.zeros(1)
 
@@ -741,11 +846,31 @@ class trainer:
             pred_y_test,
             torch.ones_like(test_y, device=device),
         )
-        mse_1 = mse(test_y[:, 0], pred_y_test[:, 0], torch.ones_like(test_y[:, 0], device=device))
-        mse_2 = mse(test_y[:, 1], pred_y_test[:, 1], torch.ones_like(test_y[:, 1], device=device))
-        mse_3 = mse(test_y[:, 2], pred_y_test[:, 2], torch.ones_like(test_y[:, 2], device=device))
-        mse_4 = mse(test_y[:, 3], pred_y_test[:, 3], torch.ones_like(test_y[:, 3], device=device))
-        mse_5 = mse(test_y[:, 4], pred_y_test[:, 4], torch.ones_like(test_y[:, 4], device=device))
+        mse_1 = mse(
+            test_y[:, 0],
+            pred_y_test[:, 0],
+            torch.ones_like(test_y[:, 0], device=device),
+        )
+        mse_2 = mse(
+            test_y[:, 1],
+            pred_y_test[:, 1],
+            torch.ones_like(test_y[:, 1], device=device),
+        )
+        mse_3 = mse(
+            test_y[:, 2],
+            pred_y_test[:, 2],
+            torch.ones_like(test_y[:, 2], device=device),
+        )
+        mse_4 = mse(
+            test_y[:, 3],
+            pred_y_test[:, 3],
+            torch.ones_like(test_y[:, 3], device=device),
+        )
+        mse_5 = mse(
+            test_y[:, 4],
+            pred_y_test[:, 4],
+            torch.ones_like(test_y[:, 4], device=device),
+        )
 
         # Plot some results:
         # linestyles = ['-', '--', '-.', ':', (0, (1, 1))]
@@ -806,5 +931,12 @@ class trainer:
         # plt.show()
 
         # Return RMSE (average and per time stamp), MAE, MAPE, Average tumor size per patient (true and pred)
-        return np.sqrt(mse_test.item()), np.sqrt(mse_1.item()), np.sqrt(mse_2.item()), np.sqrt(mse_3.item()), np.sqrt(
-            mse_4.item()), np.sqrt(mse_5.item()), mse_intensities.item()
+        return (
+            np.sqrt(mse_test.item()),
+            np.sqrt(mse_1.item()),
+            np.sqrt(mse_2.item()),
+            np.sqrt(mse_3.item()),
+            np.sqrt(mse_4.item()),
+            np.sqrt(mse_5.item()),
+            mse_intensities.item(),
+        )

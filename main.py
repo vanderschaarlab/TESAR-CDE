@@ -3,17 +3,17 @@
 import argparse
 import os
 import traceback
-import wandb
-import numpy as np
-import torch
-import scienceplots
 
+import numpy as np
+import scienceplots
+import torch
 from scipy.stats import sem
+
+import wandb
 from src.utils.cancer_simulation import get_cancer_sim_data
 from src.utils.data_utils import process_data, read_from_file, write_to_file
 from src.utils.process_irregular_data import *
 from trainer import trainer
-
 
 if "WANDB_API_KEY" not in os.environ:
     raise ValueError("WANDB_API_KEY not found in environment variables")
@@ -30,32 +30,53 @@ wandb_entity = os.environ["WANDB_ENTITY"]
 
 def init_arg():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--chemo_coeff", default=0, type=int)          # Not used
-    parser.add_argument("--radio_coeff", default=0, type=int)          # Not used
+    parser.add_argument("--chemo_coeff", default=0, type=int)  # Not used
+    parser.add_argument("--radio_coeff", default=0, type=int)  # Not used
     parser.add_argument("--obs_coeff", default=6, type=float)
-    parser.add_argument("--intensity_cov", default=0, type=int)        # 10 for final experiment (Figure 6)
-    parser.add_argument("--intensity_cov_only", default=False)         # True for final experiment (Figure 6)
-    parser.add_argument("--max_intensity", default=1, type=float)      # Max intensity (1 / S_\lambda in paper)
+    parser.add_argument(
+        "--intensity_cov", default=0, type=int
+    )  # 10 for final experiment (Figure 6)
+    parser.add_argument(
+        "--intensity_cov_only", default=False
+    )  # True for final experiment (Figure 6)
+    parser.add_argument(
+        "--max_intensity", default=1, type=float
+    )  # Max intensity (1 / S_\lambda in paper)
     parser.add_argument("--num_patients", default=200, type=int)
     parser.add_argument("--results_dir", default="results")
     parser.add_argument("--model_name", default="te_cde_test")
-    parser.add_argument("--load_dataset", default=False)               # True to skip data generation
-    parser.add_argument("--use_transformed", default=False)            # True to skip data transformation
-    parser.add_argument("--experiment", type=str, default="default")   # Add other experiments as yml files
-    parser.add_argument("--data_path", type=str, default="data/transformed/new_cancer_sim_0_0_kappa_10.p")
-    parser.add_argument("--importance_weighting", default=False)       # Use importance weighting (TESAR-CDE)
-    parser.add_argument("--ground_truth_iw", default=False)            # Use "ground truth" importance weights
-    parser.add_argument("--multitask", default=False)                  # Use multi-task setup, if not two-step is used
+    parser.add_argument("--load_dataset", default=False)  # True to skip data generation
+    parser.add_argument(
+        "--use_transformed", default=False
+    )  # True to skip data transformation
+    parser.add_argument(
+        "--experiment", type=str, default="default"
+    )  # Add other experiments as yml files
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="data/transformed/new_cancer_sim_0_0_kappa_10.p",
+    )
+    parser.add_argument(
+        "--importance_weighting", default=False
+    )  # Use importance weighting (TESAR-CDE)
+    parser.add_argument(
+        "--ground_truth_iw", default=False
+    )  # Use "ground truth" importance weights
+    parser.add_argument(
+        "--multitask", default=False
+    )  # Use multi-task setup, if not two-step is used
     parser.add_argument("--kappa", type=int, default=5)
-    parser.add_argument("--max_samples", type=int, default=1)          # Not used
+    parser.add_argument("--max_samples", type=int, default=1)  # Not used
     parser.add_argument("--iterations", type=int, default=10)
     parser.add_argument("--save_raw_datapath", type=str, default="data/raw")
-    parser.add_argument("--save_transformed_datapath", type=str, default="data/transformed")
+    parser.add_argument(
+        "--save_transformed_datapath", type=str, default="data/transformed"
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
-
     # Setup project:
     args = init_arg()
 
@@ -87,8 +108,7 @@ if __name__ == "__main__":
     mses_int = []
 
     for i in range(args.iterations):
-
-        print('Starting iteration ', i)
+        print("Starting iteration ", i)
 
         # Set random seed
         random_seed = i
@@ -97,7 +117,7 @@ if __name__ == "__main__":
         torch.manual_seed(random_seed)
 
         # Generate or load raw data -- latent paths of X_t, A_t, Y_t, lambda_t
-        if not(load_dataset) or args.data_path == None:
+        if not (load_dataset) or args.data_path == None:
             logging.info("Generating dataset")
             pickle_map = get_cancer_sim_data(
                 chemo_coeff=args.chemo_coeff,
@@ -156,12 +176,16 @@ if __name__ == "__main__":
                 max_samples=max_samples,
             )
         else:
-            transformed_datapath = f"data/transformed/new_cancer_sim_{coeff}_{coeff}_kappa_{kappa}.p"
+            transformed_datapath = (
+                f"data/transformed/new_cancer_sim_{coeff}_{coeff}_kappa_{kappa}.p"
+            )
             logging.info(f"Loading transformed data from {transformed_datapath}")
             pickle_map = read_from_file(transformed_datapath)
 
         if args.save_transformed_datapath != None:
-            logging.info(f"Writing transformed data to {args.save_transformed_datapath}")
+            logging.info(
+                f"Writing transformed data to {args.save_transformed_datapath}"
+            )
             write_to_file(
                 pickle_map,
                 f"{args.save_transformed_datapath}/new_cancer_sim_{coeff}_{coeff}_kappa_{kappa}.p",
@@ -169,7 +193,12 @@ if __name__ == "__main__":
 
         # Process data (train-val-test + normalisation)
         logging.info("Processing dataset")
-        training_processed, validation_processed, test_f_processed, test_cf_processed = process_data(pickle_map)
+        (
+            training_processed,
+            validation_processed,
+            test_f_processed,
+            test_cf_processed,
+        ) = process_data(pickle_map)
 
         use_time = config["use_time"]
 
@@ -206,12 +235,26 @@ if __name__ == "__main__":
 
         # Test model (factual scenarios + counterfactual scenarios):
         logging.info("Testing model (factual)...")
-        rmse_factual, rmse1_factual, rmse2_factual, rmse3_factual, rmse4_factual, rmse5_factual, mse_intensities = \
-            cde_trainer.predict(test_data=test_f_processed, label="Factual")
+        (
+            rmse_factual,
+            rmse1_factual,
+            rmse2_factual,
+            rmse3_factual,
+            rmse4_factual,
+            rmse5_factual,
+            mse_intensities,
+        ) = cde_trainer.predict(test_data=test_f_processed, label="Factual")
 
         logging.info("Testing model (counterfactual)...")
-        rmse_counterfactual, rmse1_counterfactual, rmse2_counterfactual, rmse3_counterfactual, rmse4_counterfactual, rmse5_counterfactual, mse_intensities_counterfactual = cde_trainer.predict(
-            test_data=test_cf_processed, label="Counterfactual")
+        (
+            rmse_counterfactual,
+            rmse1_counterfactual,
+            rmse2_counterfactual,
+            rmse3_counterfactual,
+            rmse4_counterfactual,
+            rmse5_counterfactual,
+            mse_intensities_counterfactual,
+        ) = cde_trainer.predict(test_data=test_cf_processed, label="Counterfactual")
 
         # Log average RMSE
         rmse_total = (rmse_factual + rmse_counterfactual) / 2
