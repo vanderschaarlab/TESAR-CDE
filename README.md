@@ -24,7 +24,9 @@ trainer.py                          # Process data as tensors, fit model, make p
 The ```requirements.txt``` provides the necessary packages.
 All code was written for ```python 3.7.9```.
 
-Weights and Biases ([W&B](https://wandb.com)) is required to log the experiments. 
+Weights and Biases ([W&B](https://wandb.com)) is required to log the experiments.
+- Set wandb API key as WANDB_API_KEY environment variable: `export WANDB_API_KEY=...`.
+- Set wandb username as WANDB_ENTITY environment variable: `export WANDB_ENTITY=...``
 
 ## Usage
 The experiments can be run through the ```main.py```file using the following arguments:

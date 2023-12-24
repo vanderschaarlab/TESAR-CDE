@@ -6,6 +6,7 @@ import traceback
 import wandb
 import numpy as np
 import torch
+import scienceplots
 
 from scipy.stats import sem
 from src.utils.cancer_simulation import get_cancer_sim_data
@@ -13,8 +14,18 @@ from src.utils.data_utils import process_data, read_from_file, write_to_file
 from src.utils.process_irregular_data import *
 from trainer import trainer
 
-os.environ["WANDB_API_KEY"] = ""        # Fill in wandb API key
-wandb_entity = ""                       # Fill in wandb username
+
+if "WANDB_API_KEY" not in os.environ:
+    raise ValueError("WANDB_API_KEY not found in environment variables")
+if "WANDB_ENTITY" not in os.environ:
+    raise ValueError("WANDB_ENTITY not found in environment variables")
+
+# Set wandb API key as WANDB_API_KEY environment variable:
+# export WANDB_API_KEY=...
+
+# Set wandb username as WANDB_ENTITY environment variable:
+# export WANDB_ENTITY=...
+wandb_entity = os.environ["WANDB_ENTITY"]
 
 
 def init_arg():
