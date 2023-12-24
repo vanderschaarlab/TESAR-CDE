@@ -182,3 +182,5 @@ pyrightconfig.json
 run.sh
 wandb/
 log.txt
+checkpoint.pt
+data/
